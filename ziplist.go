@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
+	"math"
 )
 
 const (
-	ZIPLIST_MAX_LENGTH = 0xFFFF
+	ZIPLIST_MAX_LENGTH = math.MaxUint16
 
 	ZIPLIST_ZLTAIL_OFFSET = 4
 	ZIPLIST_ZLLEN_OFFSET  = 8
@@ -19,11 +20,12 @@ const (
 	// a ZipListEntry can use uint32 to represent the length of the previous entry.
 	// the PrevLen part takes 5 bytes at most, the Encoding part takes 5 bytes at most.
 	// as a result, the entry part can take uint32 - 10 bytes at most.
-	ZIPLISTENTRY_5BYTES_MAX_SIZE = 1<<32 - 11
+	ZIPLISTENTRY_5BYTES_MAX_SIZE = math.MaxUint32 - 10
 )
 
 // <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
 // uint32    uint32   uint16							  uint8
+// ZipList can store a string that takes ZIPLISTENTRY_5BYTES_MAX_SIZE bits at most, or an int64 value.
 type ZipList struct {
 	List []byte
 }
@@ -34,7 +36,6 @@ func NewZipList() *ZipList {
 	z.List = append(z.List, UI32ToB(0)...)
 	z.List = append(z.List, UI16ToB(0)...)
 	z.List = append(z.List, UI8ToB(ZIPLIST_ZLEND)...)
-
 	return z
 }
 
@@ -93,7 +94,7 @@ func (z *ZipList) Push(data interface{}) bool {
 	return true
 }
 
-func (z *ZipList) All() (res []interface{}) {
+func (z *ZipList) ToSlice() (res []interface{}) {
 	if l := z.ZLLen(); l == 0 {
 		return
 	} else {
@@ -104,8 +105,7 @@ func (z *ZipList) All() (res []interface{}) {
 		var prevLen, currLen uint32
 		currLen = z.ZLBytes() - c - 1
 
-		for i := 0; i < int(l); i++ {
-			// PrevLen consumes either 1 byte or 5 bytes.
+		for i := uint16(0); i < l; i++ {
 			var offset uint32
 
 			if z.List[c] != 0xFE {
@@ -116,11 +116,11 @@ func (z *ZipList) All() (res []interface{}) {
 				offset += 5
 			}
 
-			if z.List[c+offset] >> 6 <= 2 {
-				res[int(l)-i-1] = z.decodeString(c, offset, currLen)
+			if z.List[c+offset]>>6 <= 2 {
+				res[l-i-1] = z.decodeString(c, offset, currLen)
 
 			} else {
-				res[int(l)-i-1] = z.decodeInteger(c, offset, currLen)
+				res[l-i-1] = z.decodeInteger(c, offset, currLen)
 			}
 			c -= prevLen
 			currLen = prevLen
@@ -130,7 +130,47 @@ func (z *ZipList) All() (res []interface{}) {
 	return
 }
 
-func (z *ZipList) Index(data interface{}) int {
+// ElementAt returns the element at the given index of the ZipList.
+// If the ZipList is empty or the index is beyond the size, returns false.
+func (z *ZipList) ElementAt(idx int) (res interface{}, exists bool) {
+	if l := z.ZLLen(); l == 0 {
+		return
+	} else if idx >= int(l) {
+		return
+	} else {
+		c := z.ZLTail()
+
+		var prevLen, currLen uint32
+		currLen = z.ZLBytes() - c - 1
+
+		for i := uint16(0); i < l-uint16(idx); i++ {
+			var offset uint32
+
+			if z.List[c] != 0xFE {
+				prevLen = uint32(z.List[c])
+				offset += 1
+			} else {
+				prevLen = BToUI32(z.List, int(c+1))
+				offset += 5
+			}
+
+			if i == l-uint16(idx)-1 {
+
+				if z.List[c+offset]>>6 <= 2 {
+					return z.decodeString(c, offset, currLen), true
+				} else {
+					return z.decodeInteger(c, offset, currLen), true
+				}
+			}
+
+			c -= prevLen
+			currLen = prevLen
+		}
+	}
+	return
+}
+
+func (z *ZipList) IndexOf(data interface{}) int {
 	ss, ok1 := data.(string)
 	ii, ok2 := data.(int)
 
@@ -147,7 +187,7 @@ func (z *ZipList) Index(data interface{}) int {
 		var prevLen, currLen uint32
 		currLen = z.ZLBytes() - c - 1
 
-		for i := 0; i < int(l); i++ {
+		for i := uint16(0); i < l; i++ {
 			var offset uint32
 
 			if z.List[c] != 0xFE {
@@ -158,14 +198,14 @@ func (z *ZipList) Index(data interface{}) int {
 				offset += 5
 			}
 
-			if z.List[c+offset] >> 6 <= 2 {
+			if z.List[c+offset]>>6 <= 2 {
 				if ss == z.decodeString(c, offset, currLen) {
-					return int(l)-i-1
+					return int(l - i - 1)
 				}
 
 			} else {
 				if ii == z.decodeInteger(c, offset, currLen) {
-					return int(l)-i-1
+					return int(l - i - 1)
 				}
 			}
 			c -= prevLen
@@ -209,43 +249,43 @@ func (z *ZipList) encodeString(s string) (encoding, entry []byte) {
 }
 
 func (z *ZipList) decodeString(c, offset, currLen uint32) string {
-	switch {
-	case z.List[c+offset] >> 6 == 0x00:
+	switch z.List[c+offset] >> 6 {
+	case 0x00:
 		offset += 1
-	case z.List[c+offset] >> 6 == 0x01:
+	case 0x01:
 		offset += 2
-	case z.List[c+offset] >> 6 == 0x02:
+	case 0x02:
 		offset += 5
 	}
-		
+
 	return string(z.List[c+offset : c+currLen])
-} 
+}
 
 func (z *ZipList) encodeInteger(i int) (encoding, entry []byte) {
 	switch {
 	case i >= 0 && i <= 13:
 		encoding = UI8ToB(0xF0 | uint8(i))
-	
-	case i >= -1<<7 && i <= 1<<7-1:
+
+	case i >= math.MinInt8 && i <= math.MaxInt8:
 		encoding = UI8ToB(0xFE)
 		entry = I8ToB(int8(i))
-	
-	case i >= -1<<15 && i <= 1<<15-1:
+
+	case i >= math.MinInt16 && i <= math.MaxInt16:
 		encoding = UI8ToB(0xC0)
 		entry = I16ToB(int16(i))
-	
-	case i >= -1<<31 && i <= 1<<31-1:
+
+	case i >= math.MinInt32 && i <= math.MaxInt32:
 		encoding = UI8ToB(0xD0)
 		entry = I32ToB(int32(i))
-	
-	case i >= -1<<63 && i <= 1<<63-1:
+
+	default:
 		encoding = UI8ToB(0xE0)
 		entry = I64ToB(int64(i))
 	}
 	return
 }
 
-func (z *ZipList) decodeInteger(c, offset, currLen uint32) interface{} {
+func (z *ZipList) decodeInteger(c, offset, currLen uint32) int {
 	var i int
 	switch z.List[c+offset] {
 	case 0xFE:
@@ -271,13 +311,13 @@ func (z *ZipList) decodeInteger(c, offset, currLen uint32) interface{} {
 }
 
 func (z *ZipList) calculatePrevLen() (prevLen []byte) {
-	
+
 	tailOffset := z.ZLTail()
 
 	if tailOffset == 0 {
 		prevLen = make([]byte, 1)
 	} else {
-		p := z.ZLBytes()-1-tailOffset
+		p := z.ZLBytes() - 1 - tailOffset
 		if p < 0xFE {
 			prevLen = UI8ToB(uint8(p))
 		} else {
