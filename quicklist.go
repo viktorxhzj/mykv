@@ -1,10 +1,9 @@
 package main
 
 type QuickList interface {
-	
 	AddFirst(interface{}) bool
 	AddLast(interface{}) bool
-	
+
 	RemoveFirst(interface{}) bool
 	RemoveLast(interface{}) bool
 

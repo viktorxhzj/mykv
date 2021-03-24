@@ -8,7 +8,7 @@ type Iterator interface {
 }
 
 type ZipListIterator struct {
-	ZL ZipList
+	ZL  ZipList
 	Idx int
 }
 
@@ -32,7 +32,7 @@ func (it *ZipListIterator) Reset() {
 }
 
 type IntSetIterator struct {
-	IS IntSet
+	IS  IntSet
 	Idx int
 }
 
@@ -56,7 +56,6 @@ func (it *IntSetIterator) Reset() {
 	it.Idx = 0
 }
 
-
 // type QuickListIterator struct {}
 
 // func NewQuickListIterator() Iterator {
@@ -65,4 +64,3 @@ func (it *IntSetIterator) Reset() {
 
 // 	return it
 // }
-

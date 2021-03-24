@@ -44,7 +44,7 @@ const (
 // |XOOO 		|XXXX 	|XXXX XXXX XXXX XXXX XXXX XXXX	|
 type IntSetImpl struct {
 	Encoding uint8
-	Len   uint32
+	Len      uint32
 	Contents []uint8
 }
 
