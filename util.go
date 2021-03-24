@@ -1,133 +1,68 @@
 package main
 
-//
-// bytes to uint
-//
+import "fmt"
 
-func BToUI64(b []byte, offset int) (res uint64) {
-	for i := 0; i < 8; i++ {
-		res |= uint64(b[offset]) << (8 * (7 - i))
-		offset++
+type Iterator interface {
+	Reset()
+	Next() interface{}
+}
+
+type ZipListIterator struct {
+	ZL ZipList
+	Idx int
+}
+
+func NewZipListIterator(zl ZipList) Iterator {
+	it := new(ZipListIterator)
+	it.ZL = zl
+	return it
+}
+
+func (it *ZipListIterator) Next() (res interface{}) {
+	res = it.ZL.Get(it.Idx)
+	if res == nil {
+		fmt.Println("reaches the end")
 	}
+	it.Idx += 1
 	return
 }
 
-func BToUI32(b []byte, offset int) (res uint32) {
-	for i := 0; i < 4; i++ {
-		res |= uint32(b[offset]) << (8 * (3 - i))
-		offset++
+func (it *ZipListIterator) Reset() {
+	it.Idx = 0
+}
+
+type IntSetIterator struct {
+	IS IntSet
+	Idx int
+}
+
+func NewIntSetIterator(is IntSet) Iterator {
+	it := new(IntSetIterator)
+	it.IS = is
+	return it
+}
+
+func (it *IntSetIterator) Next() (res interface{}) {
+	if it.Idx == it.IS.Size() {
+		fmt.Println("reaches the end")
+		return
 	}
+	res = it.IS.Get(it.Idx)
+	it.Idx++
 	return
 }
 
-func BToUI16(b []byte, offset int) (res uint16) {
-	for i := 0; i < 2; i++ {
-		res |= uint16(b[offset]) << (8 * (1 - i))
-		offset++
-	}
-	return
+func (it *IntSetIterator) Reset() {
+	it.Idx = 0
 }
 
-func BToUI8(b []byte, offset int) (res uint8) {
-	res = uint8(b[offset])
-	return
-}
 
-//
-// bytes to int
-//
+// type QuickListIterator struct {}
 
-func BToI64(b []byte, offset int) (res int64) {
-	for i := 0; i < 8; i++ {
-		res |= int64(b[offset]) << (8 * (7 - i))
-		offset++
-	}
-	return
-}
+// func NewQuickListIterator() Iterator {
 
-func BToI32(b []byte, offset int) (res int32) {
-	for i := 0; i < 4; i++ {
-		res |= int32(b[offset]) << (8 * (3 - i))
-		offset++
-	}
-	return
-}
+// 	it := new(QuickListIterator)
 
-func BToI16(b []byte, offset int) (res int16) {
-	for i := 0; i < 2; i++ {
-		res |= int16(b[offset]) << (8 * (1 - i))
-		offset++
-	}
-	return
-}
+// 	return it
+// }
 
-func BToI8(b []byte, offset int) (res int8) {
-	res = int8(b[offset])
-	return
-}
-
-//
-// uint to bytes
-//
-
-func UI64ToB(n uint64) (res []byte) {
-	res = make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		res[i] = byte((n >> (8 * (7 - i))) & 0xFF)
-	}
-	return
-}
-
-func UI32ToB(n uint32) (res []byte) {
-	res = make([]byte, 4)
-	for i := 0; i < 4; i++ {
-		res[i] = byte((n >> (8 * (3 - i))) & 0xFF)
-	}
-	return
-}
-
-func UI16ToB(n uint16) (res []byte) {
-	res = make([]byte, 2)
-	for i := 0; i < 2; i++ {
-		res[i] = byte((n >> (8 * (1 - i))) & 0xFF)
-	}
-	return
-}
-
-func UI8ToB(n uint8) (res []byte) {
-	res = []byte{byte(n)}
-	return
-}
-
-//
-// int to bytes
-//
-
-func I64ToB(n int64) (res []byte) {
-	res = make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		res[i] = byte((n >> (8 * (7 - i))) & 0xFF)
-	}
-	return
-}
-
-func I32ToB(n int32) (res []byte) {
-	res = make([]byte, 4)
-	for i := 0; i < 4; i++ {
-		res[i] = byte((n >> (8 * (3 - i))) & 0xFF)
-	}
-	return
-}
-
-func I16ToB(n int16) (res []byte) {
-	res = make([]byte, 2)
-	for i := 0; i < 2; i++ {
-		res[i] = byte((n >> (8 * (1 - i))) & 0xFF)
-	}
-	return
-}
-
-func I8ToB(n int8) (res []byte) {
-	res = []byte{byte(n)}
-	return
-}

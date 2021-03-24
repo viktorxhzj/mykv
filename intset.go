@@ -5,35 +5,61 @@ import (
 	"math"
 )
 
+// IntSet is a ordered byte-slice-based data structure that holds integers.
+//
+// Time Complexity:
+// Find		O(logn);
+// Add 		O(n);
+// Get 		O(n);
+type IntSet interface {
+
+	// Find searches for the position of "value".
+	// Returns true when the value was found and
+	// sets "idx" to the position of the value within the intset.
+	// Returns false when the value is not present in the intset
+	// and sets "idx" to the position where "value" can be inserted.
+	Find(int) (int, bool)
+
+	// Add adds an integer into the intset.
+	// The integer wouldn't be inserted if it already exists.
+	Add(int) bool
+
+	// Get gets the integer at the given index.
+	// If the intset is empty or the index is beyond the size, returns 0.
+	Get(int) int
+
+	// Length returns the size of the intset.
+	Size() int
+}
+
 const (
 	INTSET_ENC_INT16 uint8 = 2
 	INTSET_ENC_INT32 uint8 = 4
 	INTSET_ENC_INT64 uint8 = 8
 )
 
-// IntSet has a maximum length of UINT32_MAX
+// IntSetImpl has a maximum length of UINT32_MAX
 // Padding:
 // |Encoding 	|Length |Contents						|
 // |XOOO 		|XXXX 	|XXXX XXXX XXXX XXXX XXXX XXXX	|
-type IntSet struct {
+type IntSetImpl struct {
 	Encoding uint8
-	Length   uint32
+	Len   uint32
 	Contents []uint8
 }
 
-func NewIntSet() *IntSet {
-	is := new(IntSet)
+func NewIntSet() IntSet {
+	is := new(IntSetImpl)
 	is.Encoding = INTSET_ENC_INT16
 	return is
 }
 
-// Find searches for the position of "value".
-// Returns true when the value was found and
-// sets "pos" to the position of the value within the intset.
-// Returns false when the value is not present in the intset
-// and sets "pos" to the position where "value" can be inserted.
-func (is *IntSet) Find(n int) (int, bool) {
-	length := int(is.Length)
+func (is *IntSetImpl) Size() int {
+	return int(is.Len)
+}
+
+func (is *IntSetImpl) Find(n int) (int, bool) {
+	length := int(is.Len)
 	if length == 0 {
 		return 0, false
 	}
@@ -67,9 +93,9 @@ func (is *IntSet) Find(n int) (int, bool) {
 	return l + 1, false
 }
 
-func (is *IntSet) Add(n int) (success bool) {
+func (is *IntSetImpl) Add(n int) (success bool) {
 
-	if is.Length == math.MaxInt32 {
+	if is.Len == math.MaxInt32 {
 		fmt.Println("intset reaches the maximum length")
 		return
 	}
@@ -87,17 +113,17 @@ func (is *IntSet) Add(n int) (success bool) {
 			fmt.Println("input already exists in the intset")
 			return
 		} else {
-			is.resize(int(is.Length) + 1)
+			is.resize(int(is.Len) + 1)
 			is.moveTail(idx)
-			is.Set(n, idx)
-			is.Length++
+			is.setAtIndex(n, idx)
+			is.Len++
 			return true
 		}
 	}
 }
 
-func (is *IntSet) Set(n, idx int) {
-	if idx < 0 || idx > int(is.Length) {
+func (is *IntSetImpl) setAtIndex(n, idx int) {
+	if idx < 0 || idx > int(is.Len) {
 		fmt.Println("invalid input idx")
 		return
 	}
@@ -125,7 +151,11 @@ func (is *IntSet) Set(n, idx int) {
 }
 
 // Get returns the integer at given index according to intset's configured encoding.
-func (is *IntSet) Get(idx int) (res int) {
+func (is *IntSetImpl) Get(idx int) (res int) {
+	if idx < 0 || idx >= int(is.Len) {
+		return
+	}
+
 	offset := idx * int(is.Encoding)
 
 	switch is.Encoding {
@@ -143,7 +173,7 @@ func (is *IntSet) Get(idx int) (res int) {
 }
 
 // ElementAtIndex returns the integer at given index according to the given encoding.
-func (is *IntSet) getEncoded(idx int, enc uint8) (res int) {
+func (is *IntSetImpl) getEncoded(idx int, enc uint8) (res int) {
 	offset := idx * int(enc)
 
 	switch enc {
@@ -162,9 +192,9 @@ func (is *IntSet) getEncoded(idx int, enc uint8) (res int) {
 }
 
 // upgradeAndAdd upgrades the intset to a larger encoding and inserts the given integer.
-func (is *IntSet) upgradeAndAdd(n int) {
+func (is *IntSetImpl) upgradeAndAdd(n int) {
 	currEnc, newEnc := is.Encoding, intsetValueEncoding(n)
-	length := int(is.Length)
+	length := int(is.Len)
 	var prepend int
 	if n < 0 {
 		prepend = 1
@@ -178,7 +208,7 @@ func (is *IntSet) upgradeAndAdd(n int) {
 	// Note that the "prepend" variable is used to make sure we have an empty
 	// space at either the beginning or the end of the intset. */
 
-	for i := length-1; i >= 0; i-- {
+	for i := length - 1; i >= 0; i-- {
 
 		// length = 7, resize to 8
 		// 0   1   2   3   4   5   6
@@ -194,25 +224,25 @@ func (is *IntSet) upgradeAndAdd(n int) {
 		// 0   1   2   3   4   5   6   7
 		// --  --  --  --  --  --  --  --
 		// A   B   C   D   E   F   G   X
-		is.Set(is.getEncoded(i, currEnc), i+prepend)
+		is.setAtIndex(is.getEncoded(i, currEnc), i+prepend)
 	}
 
 	if prepend == 1 {
-		is.Set(n, 0)
+		is.setAtIndex(n, 0)
 	} else {
-		is.Set(n, int(is.Length))
+		is.setAtIndex(n, int(is.Len))
 	}
 
-	is.Length++
+	is.Len++
 }
 
-func (is *IntSet) resize(length int) {
+func (is *IntSetImpl) resize(length int) {
 	currSize, newSize := len(is.Contents), length*int(is.Encoding)
 	is.Contents = append(is.Contents, make([]uint8, newSize-currSize)...)
 }
 
-func (is *IntSet) moveTail(idx int) {
-	begin, end := idx*int(is.Encoding), int(is.Length)*int(is.Encoding)
+func (is *IntSetImpl) moveTail(idx int) {
+	begin, end := idx*int(is.Encoding), int(is.Len)*int(is.Encoding)
 
 	for i := end - 1; i >= begin; i-- {
 		is.Contents[i+int(is.Encoding)] = is.Contents[i]
