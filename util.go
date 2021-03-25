@@ -18,13 +18,14 @@ func NewZipListIterator(zl ZipList) Iterator {
 	return it
 }
 
-func (it *ZipListIterator) Next() (res interface{}) {
-	res = it.ZL.Get(it.Idx)
-	if res == nil {
+func (it *ZipListIterator) Next() interface{} {
+	if res, err := it.ZL.Get(it.Idx); err != nil {
 		fmt.Println("reaches the end")
+		return nil
+	} else {
+		it.Idx += 1
+		return res
 	}
-	it.Idx += 1
-	return
 }
 
 func (it *ZipListIterator) Reset() {
