@@ -7,6 +7,18 @@ type Iterator interface {
 	Next() interface{}
 }
 
+func AssertValidType(e interface{}) (ss []byte, ii, t int) {
+	if s, ok := e.(string); ok {
+		ss = []byte(s)
+	} else if i, ok := e.(int); ok {
+		ii = i
+		t = 1
+	} else {
+		t = -1
+	}
+	return
+}
+
 type ZipListIterator struct {
 	ZL  ZipList
 	Idx int
@@ -48,7 +60,7 @@ func (it *IntSetIterator) Next() (res interface{}) {
 		fmt.Println("reaches the end")
 		return
 	}
-	res = it.IS.Get(it.Idx)
+	res, _ = it.IS.Get(it.Idx)
 	it.Idx++
 	return
 }
@@ -57,11 +69,29 @@ func (it *IntSetIterator) Reset() {
 	it.Idx = 0
 }
 
-// type QuickListIterator struct {}
+type QuickListIterator struct {
+	QL  QuickList
+	Idx int
+}
 
-// func NewQuickListIterator() Iterator {
+func NewQuickListIterator() Iterator {
 
-// 	it := new(QuickListIterator)
+	it := new(QuickListIterator)
 
-// 	return it
-// }
+	return it
+}
+
+func (it *QuickListIterator) Next() (res interface{}) {
+	if it.Idx == it.QL.Size() {
+		fmt.Println("reaches the end")
+		return
+	}
+
+	res, _ = it.QL.Get(it.Idx)
+	it.Idx++
+	return
+}
+
+func (it *QuickListIterator) Reset() {
+	it.Idx = 0
+}

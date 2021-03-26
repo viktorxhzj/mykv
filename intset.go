@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
@@ -22,20 +23,28 @@ type IntSet interface {
 
 	// Add adds an integer into the intset.
 	// The integer wouldn't be inserted if it already exists.
-	Add(int) bool
+	Add(int) error
 
 	// Get gets the integer at the given index.
-	// If the intset is empty or the index is beyond the size, returns 0.
-	Get(int) int
+	Get(int) (int, error)
 
 	// Length returns the size of the intset.
 	Size() int
+
+	// Delete()
 }
 
 const (
-	INTSET_ENC_INT16 uint8 = 2
-	INTSET_ENC_INT32 uint8 = 4
-	INTSET_ENC_INT64 uint8 = 8
+	IS_ENC_INT16 uint8 = 2
+	IS_ENC_INT32 uint8 = 4
+	IS_ENC_INT64 uint8 = 8
+)
+
+var (
+	ISExceedLimit    = errors.New("the intset is at maximum size")
+	ISEmpty          = errors.New("the intset is empty")
+	ISInvalidIdx     = errors.New("the given index is out of range")
+	ISDuplicateInput = errors.New("the input already exists in the intset")
 )
 
 // IntSetImpl has a maximum length of UINT32_MAX
@@ -50,7 +59,7 @@ type IntSetImpl struct {
 
 func NewIntSet() IntSet {
 	is := new(IntSetImpl)
-	is.Encoding = INTSET_ENC_INT16
+	is.Encoding = IS_ENC_INT16
 	return is
 }
 
@@ -64,7 +73,8 @@ func (is *IntSetImpl) Find(n int) (int, bool) {
 		return 0, false
 	}
 
-	mi, ma := is.Get(0), is.Get(length-1)
+	mi, _ := is.Get(0)
+	ma, _ := is.Get(length - 1)
 	if n < mi {
 		return 0, false
 	}
@@ -76,28 +86,29 @@ func (is *IntSetImpl) Find(n int) (int, bool) {
 
 	for l < r {
 		m := l + (r-l)>>1
-		if is.Get(m) == n {
+		mm, _ := is.Get(m)
+		if mm == n {
 			return m, true
-		} else if is.Get(m) < n {
+		} else if mm < n {
 			l = m + 1
 		} else {
 			r = m - 1
 		}
 	}
 
-	if is.Get(l) == n {
+	ll, _ := is.Get(l)
+	if ll == n {
 		return l, true
-	} else if is.Get(l) > n {
+	} else if ll > n {
 		return l, false
 	}
 	return l + 1, false
 }
 
-func (is *IntSetImpl) Add(n int) (success bool) {
+func (is *IntSetImpl) Add(n int) error {
 
 	if is.Len == math.MaxInt32 {
-		fmt.Println("intset reaches the maximum length")
-		return
+		return ISExceedLimit
 	}
 
 	// 1. get encoding
@@ -106,18 +117,17 @@ func (is *IntSetImpl) Add(n int) (success bool) {
 	// if encoding needs upgrade
 	if enc > is.Encoding {
 		is.upgradeAndAdd(n)
-		return true
+		return nil
 	} else {
 		// abort if already in the set
 		if idx, exists := is.Find(n); exists {
-			fmt.Println("input already exists in the intset")
-			return
+			return ISDuplicateInput
 		} else {
 			is.resize(int(is.Len) + 1)
 			is.moveTail(idx)
 			is.setAtIndex(n, idx)
 			is.Len++
-			return true
+			return nil
 		}
 	}
 }
@@ -132,15 +142,15 @@ func (is *IntSetImpl) setAtIndex(n, idx int) {
 	var b []byte
 
 	switch is.Encoding {
-	case INTSET_ENC_INT16:
+	case IS_ENC_INT16:
 		nn := int16(n)
 		b = I16ToB(nn)
 
-	case INTSET_ENC_INT32:
+	case IS_ENC_INT32:
 		nn := int32(n)
 		b = I32ToB(nn)
 
-	case INTSET_ENC_INT64:
+	case IS_ENC_INT64:
 		nn := int64(n)
 		b = I64ToB(nn)
 	}
@@ -151,25 +161,25 @@ func (is *IntSetImpl) setAtIndex(n, idx int) {
 }
 
 // Get returns the integer at given index according to intset's configured encoding.
-func (is *IntSetImpl) Get(idx int) (res int) {
-	if idx < 0 || idx >= int(is.Len) {
-		return
+func (is *IntSetImpl) Get(idx int) (int, error) {
+	if is.Len == 0 {
+		return 0, ISEmpty
+	} else if idx < 0 || idx >= int(is.Len) {
+		return 0, ISInvalidIdx
 	}
 
 	offset := idx * int(is.Encoding)
 
 	switch is.Encoding {
-	case INTSET_ENC_INT16:
-		return int(BToI16(is.Contents, offset))
+	case IS_ENC_INT16:
+		return int(BToI16(is.Contents, offset)), nil
 
-	case INTSET_ENC_INT32:
-		return int(BToI32(is.Contents, offset))
+	case IS_ENC_INT32:
+		return int(BToI32(is.Contents, offset)), nil
 
-	case INTSET_ENC_INT64:
-		return int(BToI64(is.Contents, offset))
-
+	default:
+		return int(BToI64(is.Contents, offset)), nil
 	}
-	return
 }
 
 // ElementAtIndex returns the integer at given index according to the given encoding.
@@ -177,13 +187,13 @@ func (is *IntSetImpl) getEncoded(idx int, enc uint8) (res int) {
 	offset := idx * int(enc)
 
 	switch enc {
-	case INTSET_ENC_INT16:
+	case IS_ENC_INT16:
 		res = int(BToI16(is.Contents, offset))
 
-	case INTSET_ENC_INT32:
+	case IS_ENC_INT32:
 		res = int(BToI32(is.Contents, offset))
 
-	case INTSET_ENC_INT64:
+	case IS_ENC_INT64:
 		res = int(BToI64(is.Contents, offset))
 
 	}
@@ -251,9 +261,9 @@ func (is *IntSetImpl) moveTail(idx int) {
 
 func intsetValueEncoding(n int) uint8 {
 	if n >= math.MinInt16 && n <= math.MaxInt16 {
-		return INTSET_ENC_INT16
+		return IS_ENC_INT16
 	} else if n >= math.MinInt32 && n <= math.MaxInt32 {
-		return INTSET_ENC_INT32
+		return IS_ENC_INT32
 	}
-	return INTSET_ENC_INT64
+	return IS_ENC_INT64
 }

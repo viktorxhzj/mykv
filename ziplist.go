@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"math"
 )
@@ -34,13 +35,13 @@ type ZipList interface {
 	// If the ziplist does not contain the given element, it returns -1.
 	Find(interface{}) int
 
-	// Add adds an element to the ziplist. If the given element
-	// is either an integer or a string, it returns false.
+	// Add adds an element to the ziplist.
 	Add(interface{}) error
 
 	// Get returns the element at the given index of the ziplist.
-	// If the ziplist is empty or the index is beyond the size, returns nil.
 	Get(int) (interface{}, error)
+
+	// Delete(int)
 }
 
 const (
@@ -85,6 +86,8 @@ var (
 // uint32    uint32   uint16							  uint8
 type ZipListImpl []byte
 
+// Future: supports deletion and cascadeUpdate
+
 func (z *ZipListImpl) Append(b ...byte) {
 	for _, v := range b {
 		*z = append(*z, v)
@@ -113,26 +116,26 @@ func (z *ZipListImpl) ZLLen() int {
 }
 
 func (z *ZipListImpl) Add(e interface{}) error {
-	s, ok1 := e.(string)
-	i, ok2 := e.(int)
-
 	if z.ZLLen() == ZL_MAX_LEN {
 		return ZLExceedLimit
 	}
 
-	if ok1 {
-		return z.zipListInsert([]byte(s))
-	} else if ok2 {
-		return z.zipListInsert(i)
-	}
+	s, i, t := AssertValidType(e)
 
-	return ZLInvalidInput
+	switch t {
+	case 0:
+		return z.zipListInsert(s)
+	case 1:
+		return z.zipListInsert(i)
+	default:
+		return ZLInvalidInput
+	}
 }
 
 func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 	if l := z.ZLLen(); l == 0 {
 		return nil, ZLEmpty
-	} else if idx >= l {
+	} else if idx < 0 || idx >= l {
 		return nil, ZLInvalidIdx
 	} else {
 		p := z.ZLTail()
@@ -142,9 +145,9 @@ func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 		}
 		e := z.newZipListEntry(p)
 		if e.Encoding < ZL_STR_MASK {
-			return z.loadString(p+int(e.HeaderSize), e.Len), nil
+			return string(z.loadString(p+int(e.HeaderSize), e.Len)), nil
 		} else if e.Encoding >= ZL_INT_IMM_MIN && e.Encoding <= ZL_INT_IMM_MAX {
-			return e.Encoding - ZL_INT_IMM_MIN, nil
+			return int(e.Encoding - ZL_INT_IMM_MIN), nil
 		} else {
 			return z.loadInteger(p+int(e.HeaderSize), e.Len), nil
 		}
@@ -152,8 +155,11 @@ func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 }
 
 func (z *ZipListImpl) Find(e interface{}) int {
-	ss, ok1 := e.(string)
-	ii, ok2 := e.(int)
+	ss, ii, t := AssertValidType(e)
+
+	if t == -1 {
+		return -1
+	}
 
 	if l := z.ZLLen(); l == 0 {
 		return -1
@@ -161,11 +167,11 @@ func (z *ZipListImpl) Find(e interface{}) int {
 		p := z.ZLTail()
 		for i := 0; i < l; i++ {
 			e := z.newZipListEntry(p)
-			if e.Encoding < ZL_STR_MASK && ok1 && z.loadString(p+int(e.HeaderSize), e.Len) == ss {
+			if t == 0 && e.Encoding < ZL_STR_MASK && bytes.Equal(z.loadString(p+int(e.HeaderSize), e.Len), ss) {
 				return l - i - 1
-			} else if e.Encoding >= ZL_INT_IMM_MIN && e.Encoding <= ZL_INT_IMM_MAX && ok2 && int(e.Encoding-ZL_INT_IMM_MIN) == ii {
+			} else if t == 1 && e.Encoding >= ZL_INT_IMM_MIN && e.Encoding <= ZL_INT_IMM_MAX && int(e.Encoding-ZL_INT_IMM_MIN) == ii {
 				return l - i - 1
-			} else if e.Encoding >= ZL_STR_MASK && ok2 && z.loadInteger(p+int(e.HeaderSize), e.Len) == ii {
+			} else if t == 1 && e.Encoding >= ZL_STR_MASK && z.loadInteger(p+int(e.HeaderSize), e.Len) == ii {
 				return l - i - 1
 			}
 			p -= e.PrevRawLen
@@ -272,7 +278,7 @@ func (z *ZipListImpl) storeEntryIntegerEncoding(p int, n int) (encoding uint8, r
 	return
 }
 
-func (z *ZipListImpl) saveInteger(p, n int) {
+func (z *ZipListImpl) storeInteger(p, n int) {
 	switch {
 	case n >= 0 && n <= ZL_INT_IMM_MAX-ZL_INT_IMM_MIN:
 
@@ -312,20 +318,18 @@ func (z *ZipListImpl) loadInteger(p, len int) int {
 	}
 }
 
-func (z *ZipListImpl) saveString(p int, s []byte) {
+func (z *ZipListImpl) storeString(p int, s []byte) {
 	for i := 0; i < len(s); i++ {
 		(*z)[p+i] = s[i]
 	}
 }
 
-func (z *ZipListImpl) loadString(p, len int) string {
-	return string((*z)[p : p+len])
+func (z *ZipListImpl) loadString(p, len int) []byte {
+	return (*z)[p : p+len]
 }
 
 // zipListInsert inserts the element at the tail.
 // This is different from Redis implementation as Redis supports insertion at given index other than the tail.
-// the given position.
-// If the element is inserted at the tail, z[p] = ZL_END.
 func (z *ZipListImpl) zipListInsert(e interface{}) error {
 	var curLen, reqLen, newLen, prevLen int
 
@@ -371,11 +375,11 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 	z.storePrevEntryLength(p, prevLen)
 	if ok1 {
 		_, add2 := z.storeEntryStringEncoding(p+add1, s)
-		z.saveString(p+add1+add2, s)
+		z.storeString(p+add1+add2, s)
 	}
 	if ok2 {
 		_, add2 := z.storeEntryIntegerEncoding(p+add1, i)
-		z.saveInteger(p+add1+add2, i)
+		z.storeInteger(p+add1+add2, i)
 	}
 
 	// update ZLLen
