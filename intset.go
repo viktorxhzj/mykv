@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math"
 )
@@ -38,11 +37,6 @@ const (
 	IS_ENC_INT16 uint8 = 2
 	IS_ENC_INT32 uint8 = 4
 	IS_ENC_INT64 uint8 = 8
-)
-
-var (
-	ISDuplicateInputErr = errors.New("the input already exists")
-
 )
 
 // IntSetImpl has a maximum length of UINT32_MAX
@@ -119,7 +113,7 @@ func (is *IntSetImpl) Add(n int) error {
 	} else {
 		// abort if already in the set
 		if idx, exists := is.Find(n); exists {
-			return ISDuplicateInputErr
+			return DuplicateInputErr
 		} else {
 			is.resize(int(is.Len) + 1)
 			is.moveTail(idx)
