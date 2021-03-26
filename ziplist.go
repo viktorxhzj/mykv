@@ -75,11 +75,8 @@ const (
 )
 
 var (
-	ZLExceedLimit      = errors.New("the ziplist is at maximum size")
-	ZLInvalidInput     = errors.New("input data is neither string or integer")
-	ZLEmpty            = errors.New("the ziplist is empty")
-	ZLInvalidIdx       = errors.New("the given index is out of rawnge")
-	ZLEntryExceedLimit = errors.New("input data is too large")
+	ZLInvalidInputErr     = errors.New("input data is neither string or integer")
+	ZLEntryExceedLimitErr = errors.New("input data is too large")
 )
 
 // <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
@@ -117,7 +114,7 @@ func (z *ZipListImpl) ZLLen() int {
 
 func (z *ZipListImpl) Add(e interface{}) error {
 	if z.ZLLen() == ZL_MAX_LEN {
-		return ZLExceedLimit
+		return ExceedLimitErr
 	}
 
 	s, i, t := AssertValidType(e)
@@ -128,15 +125,15 @@ func (z *ZipListImpl) Add(e interface{}) error {
 	case 1:
 		return z.zipListInsert(i)
 	default:
-		return ZLInvalidInput
+		return ZLInvalidInputErr
 	}
 }
 
 func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 	if l := z.ZLLen(); l == 0 {
-		return nil, ZLEmpty
+		return nil, EmptyErr
 	} else if idx < 0 || idx >= l {
-		return nil, ZLInvalidIdx
+		return nil, InvalidIdxErr
 	} else {
 		p := z.ZLTail()
 		for i := 0; i < l-idx-1; i++ {
@@ -362,7 +359,7 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 	reqLen += add1
 
 	if reqLen > ZL_ENTRY_MAX_SIZE {
-		return ZLEntryExceedLimit
+		return ZLEntryExceedLimitErr
 	}
 
 	// resize and update ZLBytes, ZLTail

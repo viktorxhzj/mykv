@@ -41,10 +41,8 @@ const (
 )
 
 var (
-	ISExceedLimit    = errors.New("the intset is at maximum size")
-	ISEmpty          = errors.New("the intset is empty")
-	ISInvalidIdx     = errors.New("the given index is out of range")
-	ISDuplicateInput = errors.New("the input already exists in the intset")
+	ISDuplicateInputErr = errors.New("the input already exists")
+
 )
 
 // IntSetImpl has a maximum length of UINT32_MAX
@@ -108,7 +106,7 @@ func (is *IntSetImpl) Find(n int) (int, bool) {
 func (is *IntSetImpl) Add(n int) error {
 
 	if is.Len == math.MaxInt32 {
-		return ISExceedLimit
+		return ExceedLimitErr
 	}
 
 	// 1. get encoding
@@ -121,7 +119,7 @@ func (is *IntSetImpl) Add(n int) error {
 	} else {
 		// abort if already in the set
 		if idx, exists := is.Find(n); exists {
-			return ISDuplicateInput
+			return ISDuplicateInputErr
 		} else {
 			is.resize(int(is.Len) + 1)
 			is.moveTail(idx)
@@ -163,9 +161,9 @@ func (is *IntSetImpl) setAtIndex(n, idx int) {
 // Get returns the integer at given index according to intset's configured encoding.
 func (is *IntSetImpl) Get(idx int) (int, error) {
 	if is.Len == 0 {
-		return 0, ISEmpty
+		return 0, EmptyErr
 	} else if idx < 0 || idx >= int(is.Len) {
-		return 0, ISInvalidIdx
+		return 0, InvalidIdxErr
 	}
 
 	offset := idx * int(is.Encoding)

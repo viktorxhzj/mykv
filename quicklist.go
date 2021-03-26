@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"math"
 )
 
@@ -37,8 +36,6 @@ const (
 
 var (
 	QLOptimizationLevel = [5]int{4096, 8192, 16384, 32768, 65536}
-	QLExceedLimit       = errors.New("the quicklist is at maximum size")
-	QLInvalidIdx        = errors.New("the given index is out of rawnge")
 )
 
 type QuickListNode struct {
@@ -88,7 +85,7 @@ func (q *QuickListImpl) Size() int {
 
 func (q *QuickListImpl) Get(idx int) (entry QuickListEntry, err error) {
 	if idx >= q.Count || (idx == math.MinInt64 && q.Count != QL_MAX_SIZE) || (-idx > q.Count) {
-		err = QLInvalidIdx
+		err = InvalidIdxErr
 		return
 	}
 
@@ -118,12 +115,12 @@ func (q *QuickListImpl) Get(idx int) (entry QuickListEntry, err error) {
 
 func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 	if q.Count == QL_MAX_SIZE {
-		err = QLExceedLimit
+		err = ExceedLimitErr
 		return
 	}
 
 	if _, _, t := AssertValidType(e); t == -1 {
-		err = ZLInvalidInput
+		err = ZLInvalidInputErr
 		return
 	}
 
@@ -136,7 +133,7 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 		h = q.Head.Next
 		if !h.AllowInsert(e, q.Fill) {
 			if q.Len == QL_MAX_LEN {
-				err = QLExceedLimit
+				err = ExceedLimitErr
 				return
 			}
 			h = q.InsertHeadNode()
@@ -154,12 +151,12 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 
 func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 	if q.Count == QL_MAX_SIZE {
-		err = QLExceedLimit
+		err = ExceedLimitErr
 		return
 	}
 
 	if _, _, t := AssertValidType(e); t == -1 {
-		err = ZLInvalidInput
+		err = ZLInvalidInputErr
 		return
 	}
 
@@ -172,7 +169,7 @@ func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 		h = q.Tail.Prev
 		if !h.AllowInsert(e, q.Fill) {
 			if q.Len == QL_MAX_LEN {
-				err = QLExceedLimit
+				err = ExceedLimitErr
 				return
 			}
 			h = q.InsertTailNode()
