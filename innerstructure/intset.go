@@ -1,8 +1,9 @@
-package main
+package innerstructure
 
 import (
 	"fmt"
 	"math"
+	"mykv/util"
 )
 
 // IntSet is a ordered byte-slice-based data structure that holds integers.
@@ -136,15 +137,15 @@ func (is *IntSetImpl) setAtIndex(n, idx int) {
 	switch is.Encoding {
 	case IS_ENC_INT16:
 		nn := int16(n)
-		b = I16ToB(nn)
+		b = util.I16ToB(nn)
 
 	case IS_ENC_INT32:
 		nn := int32(n)
-		b = I32ToB(nn)
+		b = util.I32ToB(nn)
 
 	case IS_ENC_INT64:
 		nn := int64(n)
-		b = I64ToB(nn)
+		b = util.I64ToB(nn)
 	}
 
 	for i := 0; i < int(is.Encoding); i++ {
@@ -164,13 +165,13 @@ func (is *IntSetImpl) Get(idx int) (int, error) {
 
 	switch is.Encoding {
 	case IS_ENC_INT16:
-		return int(BToI16(is.Contents, offset)), nil
+		return int(util.BToI16(is.Contents, offset)), nil
 
 	case IS_ENC_INT32:
-		return int(BToI32(is.Contents, offset)), nil
+		return int(util.BToI32(is.Contents, offset)), nil
 
 	default:
-		return int(BToI64(is.Contents, offset)), nil
+		return int(util.BToI64(is.Contents, offset)), nil
 	}
 }
 
@@ -180,13 +181,13 @@ func (is *IntSetImpl) getEncoded(idx int, enc uint8) (res int) {
 
 	switch enc {
 	case IS_ENC_INT16:
-		res = int(BToI16(is.Contents, offset))
+		res = int(util.BToI16(is.Contents, offset))
 
 	case IS_ENC_INT32:
-		res = int(BToI32(is.Contents, offset))
+		res = int(util.BToI32(is.Contents, offset))
 
 	case IS_ENC_INT64:
-		res = int(BToI64(is.Contents, offset))
+		res = int(util.BToI64(is.Contents, offset))
 
 	}
 	fmt.Println("res = ", res)

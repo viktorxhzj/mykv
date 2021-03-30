@@ -1,4 +1,4 @@
-package main
+package util
 
 //
 // bytes to uint

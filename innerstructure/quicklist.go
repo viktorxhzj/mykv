@@ -1,7 +1,8 @@
-package main
+package innerstructure
 
 import (
 	"math"
+	"mykv/util"
 )
 
 type QuickList interface {
@@ -119,7 +120,7 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 		return
 	}
 
-	if _, _, t := AssertValidType(e); t == -1 {
+	if _, _, t := util.AssertValidType(e); t == -1 {
 		err = ZLInvalidInputErr
 		return
 	}
@@ -155,7 +156,7 @@ func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 		return
 	}
 
-	if _, _, t := AssertValidType(e); t == -1 {
+	if _, _, t := util.AssertValidType(e); t == -1 {
 		err = ZLInvalidInputErr
 		return
 	}
@@ -230,7 +231,7 @@ func (node *QuickListNode) UpdateSize() {
 func (node *QuickListNode) AllowInsert(e interface{}, fill int16) bool {
 	// estimate offset
 	var size, overhead int
-	ss, ii, t := AssertValidType(e)
+	ss, ii, t := util.AssertValidType(e)
 
 	switch t {
 	case 0:

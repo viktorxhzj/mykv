@@ -1,4 +1,4 @@
-package main
+package innerstructure
 
 import (
 	"fmt"
@@ -41,15 +41,5 @@ func TestZipList_Iterator(t *testing.T) {
 		if e != nil {
 			fmt.Println(e)
 		}
-	}
-
-	it := NewZipListIterator(z)
-
-	for {
-		nxt := it.Next()
-		if nxt == nil {
-			break
-		}
-		fmt.Println(nxt)
 	}
 }

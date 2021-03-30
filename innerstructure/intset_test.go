@@ -1,4 +1,4 @@
-package main
+package innerstructure
 
 import (
 	"fmt"
@@ -37,21 +37,6 @@ func TestIntSet_Upgrade(t *testing.T) {
 	for i := range sli {
 		fmt.Println(is.Get(i))
 	}
-
-	it := NewIntSetIterator(is)
-
-	for {
-		nxt := it.Next()
-		if nxt == nil {
-			break
-		}
-		fmt.Println(nxt)
-	}
-
-	for _, v := range sli {
-		_, exists := is.Find(v)
-		fmt.Println(exists)
-	}
 }
 
 func TestIntSet_Iterator(t *testing.T) {
@@ -66,15 +51,5 @@ func TestIntSet_Iterator(t *testing.T) {
 
 	for i := range sli {
 		fmt.Println(is.Get(i))
-	}
-
-	it := NewIntSetIterator(is)
-
-	for {
-		nxt := it.Next()
-		if nxt == nil {
-			break
-		}
-		fmt.Println(nxt)
 	}
 }

@@ -1,9 +1,10 @@
-package main
+package innerstructure
 
 import (
 	"bytes"
 	"errors"
 	"math"
+	"mykv/util"
 )
 
 // ZipList is a byte-slice-based data structure
@@ -93,23 +94,23 @@ func (z *ZipListImpl) Append(b ...byte) {
 
 func NewZipList() ZipList {
 	z := new(ZipListImpl)
-	z.Append(UI32ToB(ZL_INIT_SIZE)...)
-	z.Append(UI32ToB(ZL_INIT_SIZE - 1)...)
-	z.Append(UI16ToB(0)...)
-	z.Append(UI8ToB(ZL_END)...)
+	z.Append(util.UI32ToB(ZL_INIT_SIZE)...)
+	z.Append(util.UI32ToB(ZL_INIT_SIZE - 1)...)
+	z.Append(util.UI16ToB(0)...)
+	z.Append(util.UI8ToB(ZL_END)...)
 	return z
 }
 
 func (z *ZipListImpl) ZLBytes() int {
-	return int(BToUI32(*z, 0))
+	return int(util.BToUI32(*z, 0))
 }
 
 func (z *ZipListImpl) ZLTail() int {
-	return int(BToUI32(*z, ZL_TAIL_OFFSET))
+	return int(util.BToUI32(*z, ZL_TAIL_OFFSET))
 }
 
 func (z *ZipListImpl) ZLLen() int {
-	return int(BToUI16(*z, ZL_ZLLEN_OFFSET))
+	return int(util.BToUI16(*z, ZL_ZLLEN_OFFSET))
 }
 
 func (z *ZipListImpl) Add(e interface{}) error {
@@ -117,7 +118,7 @@ func (z *ZipListImpl) Add(e interface{}) error {
 		return ExceedLimitErr
 	}
 
-	s, i, t := AssertValidType(e)
+	s, i, t := util.AssertValidType(e)
 
 	switch t {
 	case 0:
@@ -152,7 +153,7 @@ func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 }
 
 func (z *ZipListImpl) Find(e interface{}) int {
-	ss, ii, t := AssertValidType(e)
+	ss, ii, t := util.AssertValidType(e)
 
 	if t == -1 {
 		return -1
@@ -178,21 +179,21 @@ func (z *ZipListImpl) Find(e interface{}) int {
 }
 
 func (z *ZipListImpl) updateZLTail(tailPos int) {
-	b := UI32ToB(uint32(tailPos))
+	b := util.UI32ToB(uint32(tailPos))
 	for i := 0; i < 4; i++ {
 		(*z)[ZL_TAIL_OFFSET+i] = b[i]
 	}
 }
 
 func (z *ZipListImpl) updateZLLen() {
-	b := UI16ToB(uint16(z.ZLLen() + 1))
+	b := util.UI16ToB(uint16(z.ZLLen() + 1))
 	for i := 0; i < 2; i++ {
 		(*z)[ZL_ZLLEN_OFFSET+i] = b[i]
 	}
 }
 
 func (z *ZipListImpl) updateZLBytes() {
-	b := UI32ToB(uint32(len(*z)))
+	b := util.UI32ToB(uint32(len(*z)))
 	for i := 0; i < 4; i++ {
 		(*z)[i] = b[i]
 	}
@@ -212,7 +213,7 @@ func (z *ZipListImpl) storePrevEntryLength(p, prevLen int) (reqLen int) {
 			return
 		}
 		(*z)[p] = ZL_BIG_PREVLEN
-		b := UI32ToB(uint32(prevLen))
+		b := util.UI32ToB(uint32(prevLen))
 		for i := 0; i < 4; i++ {
 			(*z)[p+i+1] = b[i]
 		}
@@ -244,7 +245,7 @@ func (z *ZipListImpl) storeEntryStringEncoding(p int, s []byte) (encoding uint8,
 			return
 		}
 		(*z)[p] = ZL_STR_32B
-		b := UI32ToB(uint32(rawLen))
+		b := util.UI32ToB(uint32(rawLen))
 		for i := 0; i < 4; i++ {
 			(*z)[p+i+1] = b[i]
 		}
@@ -280,19 +281,19 @@ func (z *ZipListImpl) storeInteger(p, n int) {
 	case n >= 0 && n <= ZL_INT_IMM_MAX-ZL_INT_IMM_MIN:
 
 	case n >= math.MinInt8 && n <= math.MaxInt8:
-		(*z)[p] = I8ToB(int8(n))[0]
+		(*z)[p] = util.I8ToB(int8(n))[0]
 	case n >= math.MinInt16 && n <= math.MaxInt16:
-		b := I16ToB(int16(n))
+		b := util.I16ToB(int16(n))
 		for i := 0; i < 2; i++ {
 			(*z)[p+i] = b[i]
 		}
 	case n >= math.MinInt32 && n <= math.MaxInt32:
-		b := I32ToB(int32(n))
+		b := util.I32ToB(int32(n))
 		for i := 0; i < 4; i++ {
 			(*z)[p+i] = b[i]
 		}
 	default:
-		b := I64ToB(int64(n))
+		b := util.I64ToB(int64(n))
 		for i := 0; i < 8; i++ {
 			(*z)[p+i] = b[i]
 		}
@@ -305,13 +306,13 @@ func (z *ZipListImpl) loadInteger(p, len int) int {
 		return 0
 
 	case 1:
-		return int(BToI8(*z, p))
+		return int(util.BToI8(*z, p))
 	case 2:
-		return int(BToI16(*z, p))
+		return int(util.BToI16(*z, p))
 	case 4:
-		return int(BToI32(*z, p))
+		return int(util.BToI32(*z, p))
 	default:
-		return int(BToI64(*z, p))
+		return int(util.BToI64(*z, p))
 	}
 }
 
@@ -388,10 +389,10 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 func (z *ZipListImpl) decodePrevLen(p int) (prevLenSize uint8, prevLen int) {
 	if (*z)[p] < ZL_BIG_PREVLEN {
 		prevLenSize = 1
-		prevLen = int(BToUI8(*z, p))
+		prevLen = int(util.BToUI8(*z, p))
 	} else {
 		prevLenSize = 5
-		prevLen = int(BToUI32(*z, p+1))
+		prevLen = int(util.BToUI32(*z, p+1))
 	}
 	return
 }
@@ -415,7 +416,7 @@ func (z *ZipListImpl) decodeLen(p int, encoding uint8) (lenSize uint8, len int) 
 			len = int((uint16((*z)[p]&0x3F) << 8) | uint16((*z)[p+1]))
 		case ZL_STR_32B:
 			lenSize = 5
-			len = int(BToUI32(*z, p+1))
+			len = int(util.BToUI32(*z, p+1))
 		}
 	} else {
 		lenSize = 1
