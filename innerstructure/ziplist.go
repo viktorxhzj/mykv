@@ -86,18 +86,12 @@ type ZipListImpl []byte
 
 // Future: supports deletion and cascadeUpdate
 
-func (z *ZipListImpl) Append(b ...byte) {
-	for _, v := range b {
-		*z = append(*z, v)
-	}
-}
-
 func NewZipList() ZipList {
 	z := new(ZipListImpl)
-	z.Append(util.UI32ToB(ZL_INIT_SIZE)...)
-	z.Append(util.UI32ToB(ZL_INIT_SIZE - 1)...)
-	z.Append(util.UI16ToB(0)...)
-	z.Append(util.UI8ToB(ZL_END)...)
+	*z = append(*z, util.UI32ToB(ZL_INIT_SIZE)...)
+	*z = append(*z, util.UI32ToB(ZL_INIT_SIZE - 1)...)
+	*z = append(*z, util.UI16ToB(0)...)
+	*z = append(*z, util.UI8ToB(ZL_END)...)
 	return z
 }
 
@@ -365,7 +359,7 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 
 	// resize and update ZLBytes, ZLTail
 	newLen = curLen + reqLen
-	z.Append(make([]byte, reqLen)...)
+	*z = append(*z, make([]byte, reqLen)...)
 	(*z)[newLen-1] = ZL_END
 	z.updateZLBytes()
 	z.updateZLTail(p)
