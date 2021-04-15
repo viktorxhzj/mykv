@@ -12,26 +12,15 @@ import (
 // Find		O(logn);
 // Add 		O(n);
 // Get 		O(n);
-type IntSet interface {
-
-	// Find searches for the position of "value".
-	// Returns true when the value was found and
-	// sets "idx" to the position of the value within the intset.
-	// Returns false when the value is not present in the intset
-	// and sets "idx" to the position where "value" can be inserted.
-	Find(int) (int, bool)
-
-	// Add adds an integer into the intset.
-	// The integer wouldn't be inserted if it already exists.
-	Add(int) error
-
-	// Get gets the integer at the given index.
-	Get(int) (int, error)
-
-	// Length returns the size of the intset.
-	Size() int
-
-	// Delete()
+//
+// IntSet has a maximum length of UINT32_MAX
+// Padding:
+// |Encoding 	|Length |Contents						|
+// |XOOO 		|XXXX 	|XXXX XXXX XXXX XXXX XXXX XXXX	|
+type IntSet struct {
+	encoding uint8
+	len      uint32
+	contents []uint8
 }
 
 const (
@@ -40,28 +29,24 @@ const (
 	IS_ENC_INT64 uint8 = 8
 )
 
-// IntSetImpl has a maximum length of UINT32_MAX
-// Padding:
-// |Encoding 	|Length |Contents						|
-// |XOOO 		|XXXX 	|XXXX XXXX XXXX XXXX XXXX XXXX	|
-type IntSetImpl struct {
-	Encoding uint8
-	Len      uint32
-	Contents []uint8
-}
-
-func NewIntSet() IntSet {
-	is := new(IntSetImpl)
-	is.Encoding = IS_ENC_INT16
+func NewIntSet() *IntSet {
+	is := new(IntSet)
+	is.encoding = IS_ENC_INT16
 	return is
 }
 
-func (is *IntSetImpl) Size() int {
-	return int(is.Len)
+// Size returns the size of the intset.
+func (is *IntSet) Size() int {
+	return int(is.len)
 }
 
-func (is *IntSetImpl) Find(n int) (int, bool) {
-	length := int(is.Len)
+// Find searches for the position of "value".
+// Returns true when the value was found and
+// sets "idx" to the position of the value within the intset.
+// Returns false when the value is not present in the intset
+// and sets "idx" to the position where "value" can be inserted.
+func (is *IntSet) Find(n int) (int, bool) {
+	length := int(is.len)
 	if length == 0 {
 		return 0, false
 	}
@@ -98,96 +83,92 @@ func (is *IntSetImpl) Find(n int) (int, bool) {
 	return l + 1, false
 }
 
-func (is *IntSetImpl) Add(n int) error {
+// Add adds an integer into the intset.
+// The integer wouldn't be inserted if it already exists.
+func (is *IntSet) Add(n int) error {
 
-	if is.Len == math.MaxInt32 {
-		return ExceedLimitErr
+	if is.len == math.MaxInt32 {
+		return ErrExceedLimit
 	}
 
 	// 1. get encoding
 	enc := intsetValueEncoding(n)
 
 	// if encoding needs upgrade
-	if enc > is.Encoding {
+	if enc > is.encoding {
 		is.upgradeAndAdd(n)
 		return nil
 	} else {
 		// abort if already in the set
 		if idx, exists := is.Find(n); exists {
-			return DuplicateInputErr
+			return ErrDuplicateInput
 		} else {
-			is.resize(int(is.Len) + 1)
+			is.resize(int(is.len) + 1)
 			is.moveTail(idx)
 			is.setAtIndex(n, idx)
-			is.Len++
+			is.len++
 			return nil
 		}
 	}
 }
 
-func (is *IntSetImpl) setAtIndex(n, idx int) {
-	if idx < 0 || idx > int(is.Len) {
+// Get returns the integer at given index according to intset's configured encoding.
+func (is *IntSet) Get(idx int) (int, error) {
+	if is.len == 0 {
+		return 0, ErrEmpty
+	} else if idx < 0 || idx >= int(is.len) {
+		return 0, ErrInvalidIdx
+	}
+
+	offset := idx * int(is.encoding)
+
+	switch is.encoding {
+	case IS_ENC_INT16:
+		return int(util.BToI16(is.contents, offset)), nil
+
+	case IS_ENC_INT32:
+		return int(util.BToI32(is.contents, offset)), nil
+
+	default:
+		return int(util.BToI64(is.contents, offset)), nil
+	}
+}
+
+func (is *IntSet) setAtIndex(n, idx int) {
+	if idx < 0 || idx > int(is.len) {
 		fmt.Println("invalid input idx")
 		return
 	}
 
-	offset := idx * int(is.Encoding)
-	var b []byte
+	offset := idx * int(is.encoding)
 
-	switch is.Encoding {
+	switch is.encoding {
 	case IS_ENC_INT16:
 		nn := int16(n)
-		b = util.I16ToB(nn)
+		util.I16ToB(nn, is.contents, offset)
 
 	case IS_ENC_INT32:
 		nn := int32(n)
-		b = util.I32ToB(nn)
+		util.I32ToB(nn, is.contents, offset)
 
 	case IS_ENC_INT64:
 		nn := int64(n)
-		b = util.I64ToB(nn)
-	}
-
-	for i := 0; i < int(is.Encoding); i++ {
-		is.Contents[offset+i] = b[i]
+		util.I64ToB(nn, is.contents, offset)
 	}
 }
 
-// Get returns the integer at given index according to intset's configured encoding.
-func (is *IntSetImpl) Get(idx int) (int, error) {
-	if is.Len == 0 {
-		return 0, EmptyErr
-	} else if idx < 0 || idx >= int(is.Len) {
-		return 0, InvalidIdxErr
-	}
-
-	offset := idx * int(is.Encoding)
-
-	switch is.Encoding {
-	case IS_ENC_INT16:
-		return int(util.BToI16(is.Contents, offset)), nil
-
-	case IS_ENC_INT32:
-		return int(util.BToI32(is.Contents, offset)), nil
-
-	default:
-		return int(util.BToI64(is.Contents, offset)), nil
-	}
-}
-
-// ElementAtIndex returns the integer at given index according to the given encoding.
-func (is *IntSetImpl) getEncoded(idx int, enc uint8) (res int) {
+func (is *IntSet) getEncoded(idx int, enc uint8) (res int) {
 	offset := idx * int(enc)
 
 	switch enc {
 	case IS_ENC_INT16:
-		res = int(util.BToI16(is.Contents, offset))
+		res = int(util.BToI16(is.contents, offset))
 
 	case IS_ENC_INT32:
-		res = int(util.BToI32(is.Contents, offset))
+		res = int(util.BToI32(is.contents, offset))
 
 	case IS_ENC_INT64:
-		res = int(util.BToI64(is.Contents, offset))
+		res = int(util.BToI64(is.contents, offset))
 
 	}
 	fmt.Println("res = ", res)
@@ -195,16 +176,16 @@ func (is *IntSetImpl) getEncoded(idx int, enc uint8) (res int) {
 }
 
 // upgradeAndAdd upgrades the intset to a larger encoding and inserts the given integer.
-func (is *IntSetImpl) upgradeAndAdd(n int) {
-	currEnc, newEnc := is.Encoding, intsetValueEncoding(n)
-	length := int(is.Len)
+func (is *IntSet) upgradeAndAdd(n int) {
+	currEnc, newEnc := is.encoding, intsetValueEncoding(n)
+	length := int(is.len)
 	var prepend int
 	if n < 0 {
 		prepend = 1
 	}
 
 	// First set new encoding and resize
-	is.Encoding = newEnc
+	is.encoding = newEnc
 	is.resize(length + 1)
 
 	// Upgrade back-to-front so we don't overwrite values.
@@ -233,22 +214,22 @@ func (is *IntSetImpl) upgradeAndAdd(n int) {
 	if prepend == 1 {
 		is.setAtIndex(n, 0)
 	} else {
-		is.setAtIndex(n, int(is.Len))
+		is.setAtIndex(n, int(is.len))
 	}
 
-	is.Len++
+	is.len++
 }
 
-func (is *IntSetImpl) resize(length int) {
-	currSize, newSize := len(is.Contents), length*int(is.Encoding)
-	is.Contents = append(is.Contents, make([]uint8, newSize-currSize)...)
+func (is *IntSet) resize(length int) {
+	currSize, newSize := len(is.contents), length*int(is.encoding)
+	is.contents = append(is.contents, make([]uint8, newSize-currSize)...)
 }
 
-func (is *IntSetImpl) moveTail(idx int) {
-	begin, end := idx*int(is.Encoding), int(is.Len)*int(is.Encoding)
+func (is *IntSet) moveTail(idx int) {
+	begin, end := idx*int(is.encoding), int(is.len)*int(is.encoding)
 
 	for i := end - 1; i >= begin; i-- {
-		is.Contents[i+int(is.Encoding)] = is.Contents[i]
+		is.contents[i+int(is.encoding)] = is.contents[i]
 	}
 }
 

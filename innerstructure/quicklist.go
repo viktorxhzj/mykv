@@ -5,22 +5,9 @@ import (
 	"mykv/util"
 )
 
-type QuickList interface {
-	PushHead(interface{}) (bool, error)
-	PushTail(interface{}) (bool, error)
-
-	Size() int
-
-	Get(int) (QuickListEntry, error)
-
-	// DeleteHead(interface{}) error
-	// DeleteTail(interface{}) error
-}
-
 // Redis implementation doesn't have dummy head or dummy tail,
 // but here we use them.
-
-type QuickListImpl struct {
+type QuickList struct {
 	Head  *QuickListNode // 8
 	Tail  *QuickListNode // 8
 	Count int            // 8
@@ -42,7 +29,7 @@ var (
 type QuickListNode struct {
 	Prev   *QuickListNode // 8
 	Next   *QuickListNode // 8
-	ZL     ZipList        // 8
+	ZL     *ZipList       // 8
 	ZLSize uint32         // 4 ziplist size in bytes
 
 	// |Extra 			   |Count			   |
@@ -63,7 +50,7 @@ type QuickListNode struct {
 }
 
 type QuickListEntry struct {
-	List     QuickList
+	List     *QuickList
 	Node     *QuickListNode
 	String   string
 	Integer  int
@@ -71,8 +58,8 @@ type QuickListEntry struct {
 	Offset   [2]int
 }
 
-func NewQuickList() QuickList {
-	q := new(QuickListImpl)
+func NewQuickList() *QuickList {
+	q := new(QuickList)
 	q.Fill = QL_FILL_OPTION
 	q.Head, q.Tail = NewQuickListNode(nil), NewQuickListNode(nil)
 	q.Head.Next = q.Tail
@@ -80,13 +67,13 @@ func NewQuickList() QuickList {
 	return q
 }
 
-func (q *QuickListImpl) Size() int {
+func (q *QuickList) Size() int {
 	return int(q.Count)
 }
 
-func (q *QuickListImpl) Get(idx int) (entry QuickListEntry, err error) {
+func (q *QuickList) Get(idx int) (entry QuickListEntry, err error) {
 	if idx >= q.Count || (idx == math.MinInt64 && q.Count != QL_MAX_SIZE) || (-idx > q.Count) {
-		err = InvalidIdxErr
+		err = ErrInvalidIdx
 		return
 	}
 
@@ -114,14 +101,15 @@ func (q *QuickListImpl) Get(idx int) (entry QuickListEntry, err error) {
 	return
 }
 
-func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
+func (q *QuickList) PushHead(e interface{}) (created bool, err error) {
 	if q.Count == QL_MAX_SIZE {
-		err = ExceedLimitErr
+		err = ErrExceedLimit
 		return
 	}
 
-	if _, _, t := util.AssertValidType(e); t == -1 {
-		err = ZLInvalidInputErr
+	ss, ii, t := util.AssertValidType(e)
+	if t == -1 {
+		err = ErrZLInvalidInput
 		return
 	}
 
@@ -132,9 +120,9 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 		created = true
 	} else {
 		h = q.Head.Next
-		if !h.AllowInsert(e, q.Fill) {
+		if (t == 0 && !h.AllowInsertString(ss, q.Fill)) || (t == 1 && !h.AllowInsertInt(ii, q.Fill)) {
 			if q.Len == QL_MAX_LEN {
-				err = ExceedLimitErr
+				err = ErrExceedLimit
 				return
 			}
 			h = q.InsertHeadNode()
@@ -142,7 +130,12 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 		}
 	}
 
-	h.ZL.Add(e)
+	switch t {
+	case 0:
+		h.ZL.AddString(ss)
+	case 1:
+		h.ZL.AddInt(ii)
+	}
 	h.UpdateSize()
 	q.Count++
 	h.Count++
@@ -150,14 +143,15 @@ func (q *QuickListImpl) PushHead(e interface{}) (created bool, err error) {
 	return
 }
 
-func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
+func (q *QuickList) PushTail(e interface{}) (created bool, err error) {
 	if q.Count == QL_MAX_SIZE {
-		err = ExceedLimitErr
+		err = ErrExceedLimit
 		return
 	}
 
-	if _, _, t := util.AssertValidType(e); t == -1 {
-		err = ZLInvalidInputErr
+	ss, ii, t := util.AssertValidType(e)
+	if t == -1 {
+		err = ErrZLInvalidInput
 		return
 	}
 
@@ -168,9 +162,9 @@ func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 		created = true
 	} else {
 		h = q.Tail.Prev
-		if !h.AllowInsert(e, q.Fill) {
+		if (t == 0 && !h.AllowInsertString(ss, q.Fill)) || (t == 1 && !h.AllowInsertInt(ii, q.Fill)) {
 			if q.Len == QL_MAX_LEN {
-				err = ExceedLimitErr
+				err = ErrExceedLimit
 				return
 			}
 			h = q.InsertTailNode()
@@ -178,7 +172,12 @@ func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 		}
 	}
 
-	h.ZL.Add(e)
+	switch t {
+	case 0:
+		h.ZL.AddString(ss)
+	case 1:
+		h.ZL.AddInt(ii)
+	}
 	h.UpdateSize()
 	q.Count++
 	h.Count++
@@ -186,7 +185,7 @@ func (q *QuickListImpl) PushTail(e interface{}) (created bool, err error) {
 	return
 }
 
-func (q *QuickListImpl) InsertHeadNode() *QuickListNode {
+func (q *QuickList) InsertHeadNode() *QuickListNode {
 	node := NewQuickListNode(NewZipList())
 
 	nxt := q.Head.Next
@@ -201,7 +200,7 @@ func (q *QuickListImpl) InsertHeadNode() *QuickListNode {
 	return node
 }
 
-func (q *QuickListImpl) InsertTailNode() *QuickListNode {
+func (q *QuickList) InsertTailNode() *QuickListNode {
 	node := NewQuickListNode(NewZipList())
 
 	pre := q.Tail.Prev
@@ -216,7 +215,7 @@ func (q *QuickListImpl) InsertTailNode() *QuickListNode {
 	return node
 }
 
-func NewQuickListNode(z ZipList) *QuickListNode {
+func NewQuickListNode(z *ZipList) *QuickListNode {
 	node := new(QuickListNode)
 	if z != nil {
 		node.ZL = z
@@ -228,44 +227,51 @@ func (node *QuickListNode) UpdateSize() {
 	node.ZLSize = uint32(node.ZL.ZLBytes())
 }
 
-func (node *QuickListNode) AllowInsert(e interface{}, fill int16) bool {
-	// estimate offset
-	var size, overhead int
-	ss, ii, t := util.AssertValidType(e)
+func (node *QuickListNode) AllowInsertString(ss string, fill int16) bool {
+	var overhead int
+	size := len(ss)
+	if size < 254 {
+		overhead = 1
+	} else {
+		overhead = 5
+	}
 
-	switch t {
-	case 0:
-		size = len(ss)
-		if size < 254 {
-			overhead = 1
-		} else {
-			overhead = 5
-		}
-
-		if size < 1<<6 {
-			overhead += 1
-		} else if size < 1<<14 {
-			overhead += 2
-		} else {
-			overhead += 5
-		}
-
-	case 1:
-		overhead = 2
-		switch {
-		case ii >= 0 && ii <= ZL_INT_IMM_MAX-ZL_INT_IMM_MIN:
-
-		case ii >= math.MinInt8 && ii <= math.MaxInt8:
-			overhead += 1
-		case ii >= math.MinInt16 && ii <= math.MaxInt16:
-			overhead += 2
-		case ii >= math.MinInt32 && ii <= math.MaxInt32:
-			overhead += 4
-		default:
-			overhead += 8
-		}
+	if size < 1<<6 {
+		overhead += 1
+	} else if size < 1<<14 {
+		overhead += 2
+	} else {
+		overhead += 5
 	}
 	newSize := int(node.ZLSize) + size + overhead
+
+	if quickListNodeMeetsOptimizationRequirement(newSize, fill) {
+		return true
+	} else if newSize > QL_ZL_SIZE_LIMIT {
+		// if fill is positive, then it is first constrained by byte sizes, then by count
+		return false
+	} else if node.Count < fill {
+		return true
+	}
+
+	return false
+}
+
+func (node *QuickListNode) AllowInsertInt(ii int, fill int16) bool {
+	overhead := 2
+	switch {
+	case ii >= 0 && ii <= ZL_INT_IMM_MAX-ZL_INT_IMM_MIN:
+
+	case ii >= math.MinInt8 && ii <= math.MaxInt8:
+		overhead += 1
+	case ii >= math.MinInt16 && ii <= math.MaxInt16:
+		overhead += 2
+	case ii >= math.MinInt32 && ii <= math.MaxInt32:
+		overhead += 4
+	default:
+		overhead += 8
+	}
+	newSize := int(node.ZLSize) + overhead
 
 	if quickListNodeMeetsOptimizationRequirement(newSize, fill) {
 		return true

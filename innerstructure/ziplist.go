@@ -18,32 +18,9 @@ import (
 // Size:
 // 1. ZipList uses uint32 to store the number of bytes it occupies,
 // so ZipList is at most 1<<32 -1 bytes = 4096 MB.
-//
 // 2. ZipList uses uint16 to store the number of entries,
 // so ZipList has at most 1<<16 - 1 = 65535 entries.
-type ZipList interface {
-
-	// ZLBytes returns the number of bytes that the ziplist occupies.
-	ZLBytes() int
-
-	// ZLTail returns the offset to the last entry in the list.
-	ZLTail() int
-
-	// ZLLen returns the number of entries.
-	ZLLen() int
-
-	// Find searches for the position of the given element in the ziplist and returns the index.
-	// If the ziplist does not contain the given element, it returns -1.
-	Find(interface{}) int
-
-	// Add adds an element to the ziplist.
-	Add(interface{}) error
-
-	// Get returns the element at the given index of the ziplist.
-	Get(int) (interface{}, error)
-
-	// Delete(int)
-}
+type ZipList []byte
 
 const (
 	ZL_MAX_LEN = math.MaxUint16
@@ -76,59 +53,59 @@ const (
 )
 
 var (
-	ZLInvalidInputErr     = errors.New("input data is neither string or integer")
-	ZLEntryExceedLimitErr = errors.New("input data is too large")
+	ErrZLInvalidInput     = errors.New("input data is neither string or integer")
+	ErrZLEntryExceedLimit = errors.New("input data is too large")
 )
-
-// <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
-// uint32    uint32   uint16							  uint8
-type ZipListImpl []byte
 
 // Future: supports deletion and cascadeUpdate
 
-func NewZipList() ZipList {
-	z := new(ZipListImpl)
-	*z = append(*z, util.UI32ToB(ZL_INIT_SIZE)...)
-	*z = append(*z, util.UI32ToB(ZL_INIT_SIZE - 1)...)
-	*z = append(*z, util.UI16ToB(0)...)
-	*z = append(*z, util.UI8ToB(ZL_END)...)
+func NewZipList() *ZipList {
+	z := new(ZipList)
+	*z = append(*z, make([]byte, 11)...)
+	util.UI32ToB(ZL_INIT_SIZE, *z, 0)
+	util.UI32ToB(ZL_INIT_SIZE-1, *z, ZL_TAIL_OFFSET)
+	util.UI16ToB(0, *z, ZL_ZLLEN_OFFSET)
+	util.UI8ToB(ZL_END, *z, ZL_INIT_SIZE-1)
 	return z
 }
 
-func (z *ZipListImpl) ZLBytes() int {
+// ZLBytes returns the number of bytes that the ziplist occupies.
+func (z *ZipList) ZLBytes() int {
 	return int(util.BToUI32(*z, 0))
 }
 
-func (z *ZipListImpl) ZLTail() int {
+// ZLTail returns the offset to the last entry in the list.
+func (z *ZipList) ZLTail() int {
 	return int(util.BToUI32(*z, ZL_TAIL_OFFSET))
 }
 
-func (z *ZipListImpl) ZLLen() int {
+// ZLLen returns the number of entries.
+func (z *ZipList) ZLLen() int {
 	return int(util.BToUI16(*z, ZL_ZLLEN_OFFSET))
 }
 
-func (z *ZipListImpl) Add(e interface{}) error {
+// Add adds an integer to the ziplist.
+func (z *ZipList) AddInt(i int) error {
 	if z.ZLLen() == ZL_MAX_LEN {
-		return ExceedLimitErr
+		return ErrExceedLimit
 	}
-
-	s, i, t := util.AssertValidType(e)
-
-	switch t {
-	case 0:
-		return z.zipListInsert(s)
-	case 1:
-		return z.zipListInsert(i)
-	default:
-		return ZLInvalidInputErr
-	}
+	return z.zipListInsert(i)
 }
 
-func (z *ZipListImpl) Get(idx int) (interface{}, error) {
+// Add adds a string to the ziplist.
+func (z *ZipList) AddString(s string) error {
+	if z.ZLLen() == ZL_MAX_LEN {
+		return ErrExceedLimit
+	}
+	return z.zipListInsert([]byte(s))
+}
+
+// Get returns the element at the given index of the ziplist.
+func (z *ZipList) Get(idx int) (interface{}, error) {
 	if l := z.ZLLen(); l == 0 {
-		return nil, EmptyErr
+		return nil, ErrEmpty
 	} else if idx < 0 || idx >= l {
-		return nil, InvalidIdxErr
+		return nil, ErrInvalidIdx
 	} else {
 		p := z.ZLTail()
 		for i := 0; i < l-idx-1; i++ {
@@ -146,24 +123,18 @@ func (z *ZipListImpl) Get(idx int) (interface{}, error) {
 	}
 }
 
-func (z *ZipListImpl) Find(e interface{}) int {
-	ss, ii, t := util.AssertValidType(e)
-
-	if t == -1 {
-		return -1
-	}
-
+// FindInt searches for the position of the given integer in the ziplist and returns the index.
+// If the ziplist does not contain the given element, it returns -1.
+func (z *ZipList) FindInt(ii int) int {
 	if l := z.ZLLen(); l == 0 {
 		return -1
 	} else {
 		p := z.ZLTail()
 		for i := 0; i < l; i++ {
 			e := z.newZipListEntry(p)
-			if t == 0 && e.Encoding < ZL_STR_MASK && bytes.Equal(z.loadString(p+int(e.HeaderSize), e.Len), ss) {
+			if e.Encoding >= ZL_INT_IMM_MIN && e.Encoding <= ZL_INT_IMM_MAX && int(e.Encoding-ZL_INT_IMM_MIN) == ii {
 				return l - i - 1
-			} else if t == 1 && e.Encoding >= ZL_INT_IMM_MIN && e.Encoding <= ZL_INT_IMM_MAX && int(e.Encoding-ZL_INT_IMM_MIN) == ii {
-				return l - i - 1
-			} else if t == 1 && e.Encoding >= ZL_STR_MASK && z.loadInteger(p+int(e.HeaderSize), e.Len) == ii {
+			} else if e.Encoding >= ZL_STR_MASK && z.loadInteger(p+int(e.HeaderSize), e.Len) == ii {
 				return l - i - 1
 			}
 			p -= e.PrevRawLen
@@ -172,28 +143,37 @@ func (z *ZipListImpl) Find(e interface{}) int {
 	return -1
 }
 
-func (z *ZipListImpl) updateZLTail(tailPos int) {
-	b := util.UI32ToB(uint32(tailPos))
-	for i := 0; i < 4; i++ {
-		(*z)[ZL_TAIL_OFFSET+i] = b[i]
+// FindInt searches for the position of the given string in the ziplist and returns the index.
+// If the ziplist does not contain the given element, it returns -1.
+func (z *ZipList) FindString(ss string) int {
+	if l := z.ZLLen(); l == 0 {
+		return -1
+	} else {
+		p := z.ZLTail()
+		for i := 0; i < l; i++ {
+			e := z.newZipListEntry(p)
+			if e.Encoding < ZL_STR_MASK && bytes.Equal(z.loadString(p+int(e.HeaderSize), e.Len), []byte(ss)) {
+				return l - i - 1
+			}
+			p -= e.PrevRawLen
+		}
 	}
+	return -1
 }
 
-func (z *ZipListImpl) updateZLLen() {
-	b := util.UI16ToB(uint16(z.ZLLen() + 1))
-	for i := 0; i < 2; i++ {
-		(*z)[ZL_ZLLEN_OFFSET+i] = b[i]
-	}
+func (z *ZipList) updateZLTail(tailPos int) {
+	util.UI32ToB(uint32(tailPos), *z, ZL_TAIL_OFFSET)
 }
 
-func (z *ZipListImpl) updateZLBytes() {
-	b := util.UI32ToB(uint32(len(*z)))
-	for i := 0; i < 4; i++ {
-		(*z)[i] = b[i]
-	}
+func (z *ZipList) updateZLLen() {
+	util.UI16ToB(uint16(z.ZLLen() + 1), *z, ZL_ZLLEN_OFFSET)
 }
 
-func (z *ZipListImpl) storePrevEntryLength(p, prevLen int) (reqLen int) {
+func (z *ZipList) updateZLBytes() {
+	util.UI32ToB(uint32(len(*z)), *z, 0)
+}
+
+func (z *ZipList) storePrevEntryLength(p, prevLen int) (reqLen int) {
 	if prevLen < ZL_BIG_PREVLEN {
 		reqLen = 1
 		if p == -1 {
@@ -207,15 +187,12 @@ func (z *ZipListImpl) storePrevEntryLength(p, prevLen int) (reqLen int) {
 			return
 		}
 		(*z)[p] = ZL_BIG_PREVLEN
-		b := util.UI32ToB(uint32(prevLen))
-		for i := 0; i < 4; i++ {
-			(*z)[p+i+1] = b[i]
-		}
+		util.UI32ToB(uint32(prevLen), *z, p+1)
 	}
 	return
 }
 
-func (z *ZipListImpl) storeEntryStringEncoding(p int, s []byte) (encoding uint8, reqLen int) {
+func (z *ZipList) storeEntryStringEncoding(p int, s []byte) (encoding uint8, reqLen int) {
 	reqLen = 1
 	rawLen := len(s)
 	if rawLen <= ZL_STR_06B_MAX_SIZE {
@@ -239,15 +216,12 @@ func (z *ZipListImpl) storeEntryStringEncoding(p int, s []byte) (encoding uint8,
 			return
 		}
 		(*z)[p] = ZL_STR_32B
-		b := util.UI32ToB(uint32(rawLen))
-		for i := 0; i < 4; i++ {
-			(*z)[p+i+1] = b[i]
-		}
+		util.UI32ToB(uint32(rawLen), *z, p+1)
 	}
 	return
 }
 
-func (z *ZipListImpl) storeEntryIntegerEncoding(p int, n int) (encoding uint8, reqLen int) {
+func (z *ZipList) storeEntryIntegerEncoding(p int, n int) (encoding uint8, reqLen int) {
 	reqLen = 1
 
 	switch {
@@ -270,31 +244,22 @@ func (z *ZipListImpl) storeEntryIntegerEncoding(p int, n int) (encoding uint8, r
 	return
 }
 
-func (z *ZipListImpl) storeInteger(p, n int) {
+func (z *ZipList) storeInteger(p, n int) {
 	switch {
 	case n >= 0 && n <= ZL_INT_IMM_MAX-ZL_INT_IMM_MIN:
 
 	case n >= math.MinInt8 && n <= math.MaxInt8:
-		(*z)[p] = util.I8ToB(int8(n))[0]
+		util.I8ToB(int8(n), *z, p)
 	case n >= math.MinInt16 && n <= math.MaxInt16:
-		b := util.I16ToB(int16(n))
-		for i := 0; i < 2; i++ {
-			(*z)[p+i] = b[i]
-		}
+		util.I16ToB(int16(n), *z, p)
 	case n >= math.MinInt32 && n <= math.MaxInt32:
-		b := util.I32ToB(int32(n))
-		for i := 0; i < 4; i++ {
-			(*z)[p+i] = b[i]
-		}
+		util.I32ToB(int32(n), *z, p)
 	default:
-		b := util.I64ToB(int64(n))
-		for i := 0; i < 8; i++ {
-			(*z)[p+i] = b[i]
-		}
+		util.I64ToB(int64(n), *z, p)
 	}
 }
 
-func (z *ZipListImpl) loadInteger(p, len int) int {
+func (z *ZipList) loadInteger(p, len int) int {
 	switch len {
 	case 0:
 		return 0
@@ -310,19 +275,19 @@ func (z *ZipListImpl) loadInteger(p, len int) int {
 	}
 }
 
-func (z *ZipListImpl) storeString(p int, s []byte) {
+func (z *ZipList) storeString(p int, s []byte) {
 	for i := 0; i < len(s); i++ {
 		(*z)[p+i] = s[i]
 	}
 }
 
-func (z *ZipListImpl) loadString(p, len int) []byte {
+func (z *ZipList) loadString(p, len int) []byte {
 	return (*z)[p : p+len]
 }
 
 // zipListInsert inserts the element at the tail.
 // This is different from Redis implementation as Redis supports insertion at given index other than the tail.
-func (z *ZipListImpl) zipListInsert(e interface{}) error {
+func (z *ZipList) zipListInsert(e interface{}) error {
 	var curLen, reqLen, newLen, prevLen int
 
 	curLen = len(*z)
@@ -354,7 +319,7 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 	reqLen += add1
 
 	if reqLen > ZL_ENTRY_MAX_SIZE {
-		return ZLEntryExceedLimitErr
+		return ErrZLEntryExceedLimit
 	}
 
 	// resize and update ZLBytes, ZLTail
@@ -380,7 +345,7 @@ func (z *ZipListImpl) zipListInsert(e interface{}) error {
 }
 
 // decodePrevLen returns prevLen and the size it takes (1 or 5).
-func (z *ZipListImpl) decodePrevLen(p int) (prevLenSize uint8, prevLen int) {
+func (z *ZipList) decodePrevLen(p int) (prevLenSize uint8, prevLen int) {
 	if (*z)[p] < ZL_BIG_PREVLEN {
 		prevLenSize = 1
 		prevLen = int(util.BToUI8(*z, p))
@@ -391,7 +356,7 @@ func (z *ZipListImpl) decodePrevLen(p int) (prevLenSize uint8, prevLen int) {
 	return
 }
 
-func (z *ZipListImpl) decodeEncoding(p int) (e byte) {
+func (z *ZipList) decodeEncoding(p int) (e byte) {
 	e = (*z)[p]
 	if e < ZL_STR_MASK {
 		e &= ZL_STR_MASK
@@ -399,7 +364,7 @@ func (z *ZipListImpl) decodeEncoding(p int) (e byte) {
 	return
 }
 
-func (z *ZipListImpl) decodeLen(p int, encoding uint8) (lenSize uint8, len int) {
+func (z *ZipList) decodeLen(p int, encoding uint8) (lenSize uint8, len int) {
 	if encoding < ZL_STR_MASK {
 		switch encoding {
 		case ZL_STR_06B:
@@ -431,7 +396,7 @@ type zipListEntry struct {
 	// total 32 bytes
 }
 
-func (z *ZipListImpl) newZipListEntry(p int) (e zipListEntry) {
+func (z *ZipList) newZipListEntry(p int) (e zipListEntry) {
 	e.PrevRawLenSize, e.PrevRawLen = z.decodePrevLen(p)
 	e.Encoding = z.decodeEncoding(p + int(e.PrevRawLenSize))
 	e.LenSize, e.Len = z.decodeLen(p+int(e.PrevRawLenSize), e.Encoding)

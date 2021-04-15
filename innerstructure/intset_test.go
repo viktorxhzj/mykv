@@ -25,7 +25,7 @@ func TestIntSet_Find(t *testing.T) {
 }
 
 func TestIntSet_Upgrade(t *testing.T) {
-	var is IntSet = NewIntSet()
+	is := NewIntSet()
 
 	sli := []int{math.MinInt16, math.MaxInt16, math.MinInt32, math.MaxInt32, math.MinInt64, math.MaxInt64}
 
@@ -40,7 +40,7 @@ func TestIntSet_Upgrade(t *testing.T) {
 }
 
 func TestIntSet_Iterator(t *testing.T) {
-	var is IntSet = NewIntSet()
+	is := NewIntSet()
 
 	sli := []int{math.MinInt16, math.MaxInt16, math.MinInt32, math.MaxInt32, math.MinInt64, math.MaxInt64}
 

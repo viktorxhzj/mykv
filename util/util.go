@@ -5,9 +5,9 @@ type Iterator interface {
 	Next() interface{}
 }
 
-func AssertValidType(e interface{}) (ss []byte, ii, t int) {
+func AssertValidType(e interface{}) (ss string, ii, t int) {
 	if s, ok := e.(string); ok {
-		ss = []byte(s)
+		ss = s
 	} else if i, ok := e.(int); ok {
 		ii = i
 		t = 1

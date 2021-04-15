@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	SLInputNotFoundErr = errors.New("no given input has been found")
+	ErrSLInputNotFound = errors.New("no given input has been found")
 )
 
 type SkipListImpl struct {
@@ -79,7 +79,7 @@ func (sl *SkipListImpl) Add(key string, score float64) error {
 			rank[i] = rank[i+1]
 		}
 		if x.Levels[i].Forward != nil && (x.Levels[i].Forward.Score == score && key != x.Levels[i].Forward.Key) {
-			return DuplicateInputErr
+			return ErrDuplicateInput
 		}
 		for x.Levels[i].Forward != nil && (x.Levels[i].Forward.Score < score || (x.Levels[i].Forward.Score == score && strings.Compare(key, x.Levels[i].Forward.Key) > 0)) {
 
@@ -145,7 +145,7 @@ func (sl *SkipListImpl) Delete(key string, score float64) error {
 		return nil
 	}
 
-	return SLInputNotFoundErr
+	return ErrSLInputNotFound
 }
 
 func (sl *SkipListImpl) Contains(key string, score float64) bool {

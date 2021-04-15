@@ -70,64 +70,50 @@ func BToI8(b []byte, offset int) (res int8) {
 // uint to bytes
 //
 
-func UI64ToB(n uint64) (res []byte) {
-	res = make([]byte, 8)
+func UI64ToB(n uint64, res []byte, offset int) {
 	for i := 0; i < 8; i++ {
-		res[i] = byte((n >> (8 * (7 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (7 - i))) & 0xFF)
 	}
-	return
 }
 
-func UI32ToB(n uint32) (res []byte) {
-	res = make([]byte, 4)
+func UI32ToB(n uint32, res []byte, offset int) {
 	for i := 0; i < 4; i++ {
-		res[i] = byte((n >> (8 * (3 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (3 - i))) & 0xFF)
 	}
-	return
 }
 
-func UI16ToB(n uint16) (res []byte) {
-	res = make([]byte, 2)
+func UI16ToB(n uint16, res []byte, offset int) {
 	for i := 0; i < 2; i++ {
-		res[i] = byte((n >> (8 * (1 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (1 - i))) & 0xFF)
 	}
-	return
 }
 
-func UI8ToB(n uint8) (res []byte) {
-	res = []byte{byte(n)}
-	return
+func UI8ToB(n uint8, res []byte, offset int) {
+	res[offset] = n
 }
 
 //
 // int to bytes
 //
 
-func I64ToB(n int64) (res []byte) {
-	res = make([]byte, 8)
+func I64ToB(n int64, res []byte, offset int) {
 	for i := 0; i < 8; i++ {
-		res[i] = byte((n >> (8 * (7 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (7 - i))) & 0xFF)
 	}
-	return
 }
 
-func I32ToB(n int32) (res []byte) {
-	res = make([]byte, 4)
+func I32ToB(n int32, res []byte, offset int) {
 	for i := 0; i < 4; i++ {
-		res[i] = byte((n >> (8 * (3 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (3 - i))) & 0xFF)
 	}
-	return
 }
 
-func I16ToB(n int16) (res []byte) {
-	res = make([]byte, 2)
+func I16ToB(n int16, res []byte, offset int) {
 	for i := 0; i < 2; i++ {
-		res[i] = byte((n >> (8 * (1 - i))) & 0xFF)
+		res[i+offset] = byte((n >> (8 * (1 - i))) & 0xFF)
 	}
-	return
 }
 
-func I8ToB(n int8) (res []byte) {
-	res = []byte{byte(n)}
-	return
+func I8ToB(n int8, res []byte, offset int) {
+	res[offset] = byte(n)
 }

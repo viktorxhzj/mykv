@@ -12,11 +12,6 @@ func TestNewSkipList_Main(t *testing.T) {
 
 	list := NewSkipList()
 
-	type A struct {
-		Key string
-		Val float64
-	}
-
 	k := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 	v := []float64{0.68, 0.47, 0.57, 0.69, 0.59, 0.42, 0.29, 0.24, 0.43, 0.92}
 
