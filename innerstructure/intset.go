@@ -3,7 +3,7 @@ package innerstructure
 import (
 	"fmt"
 	"math"
-	"mykv/util"
+	"github.com/viktorxhzj/mykv/util"
 )
 
 // IntSet is a ordered byte-slice-based data structure that holds integers.

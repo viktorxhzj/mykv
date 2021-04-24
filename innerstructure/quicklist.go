@@ -2,7 +2,7 @@ package innerstructure
 
 import (
 	"math"
-	"mykv/util"
+	"github.com/viktorxhzj/mykv/util"
 )
 
 // Redis implementation doesn't have dummy head or dummy tail,

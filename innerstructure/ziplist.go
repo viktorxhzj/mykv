@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
-	"mykv/util"
+	"github.com/viktorxhzj/mykv/util"
 )
 
 // ZipList is a byte-slice-based data structure
