@@ -120,9 +120,11 @@ func (d *Dict) TransferTable() {
 	d.table[0].Entries = d.table[1].Entries
 	d.table[0].Size = d.table[1].Size
 	d.table[0].SizeMask = d.table[1].SizeMask
+	d.table[0].Used = d.table[1].Used
 	d.table[1].Entries = nil
 	d.table[1].Size = 0
 	d.table[1].SizeMask = 0
+	d.table[1].Used = 0
 }
 
 func (d *Dict) addRaw(key interface{}, hash int64) *dictEntry {
