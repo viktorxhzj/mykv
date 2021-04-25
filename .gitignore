@@ -1,2 +1,4 @@
 .VSCodeCounter
 .vscode
+*/*.out
+*/*.test
