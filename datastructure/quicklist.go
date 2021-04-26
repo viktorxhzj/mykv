@@ -1,4 +1,4 @@
-package innerstructure
+package datastructure
 
 import (
 	"math"
